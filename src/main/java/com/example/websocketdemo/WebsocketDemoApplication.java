@@ -32,8 +32,10 @@ public class WebsocketDemoApplication {
     }
 
     @Bean
-    public ObjectReader objectListStringReader(ObjectMapper objectMapper){
-        return objectMapper.readerFor(new TypeReference<List<String>>() {});
+    public ObjectReader objectListStringReader(ObjectMapper objectMapper) {
+        return objectMapper.readerFor(new TypeReference<List<String>>() {
+        });
     }
+
 
 }

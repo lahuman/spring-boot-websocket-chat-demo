@@ -2,6 +2,7 @@ package com.example.websocketdemo.controller;
 
 import com.example.websocketdemo.model.ChatMessage;
 import com.example.websocketdemo.service.BlackWordService;
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.ObjectReader;
@@ -50,7 +51,8 @@ public class ChatController {
     private BlackWordService service;
 
     @GetMapping("/blackWordList")
-    public @ResponseBody  ChatMessage blackWordList() {
+    public @ResponseBody
+    ChatMessage blackWordList() {
         //send blackWorld List
         ChatMessage blackMessage = new ChatMessage();
         blackMessage.setType(ChatMessage.MessageType.BLACK);
@@ -62,31 +64,38 @@ public class ChatController {
     @SendTo("/topic/public")
     public ChatMessage sendMessage(@Payload ChatMessage chatMessage) {
 
-        String result = restTemplate.postForObject(baseUrl, "text=" + chatMessage.getContent(), String.class);
+        String apiResult = restTemplate.postForObject(baseUrl, "text=" + chatMessage.getContent(), String.class);
         try {
-            JsonNode actualObj = objectMapper.readTree(result);
-            if (actualObj.get("rsp").get("expletive") != null) {
-                logger.info(actualObj.get("rsp").get("expletive").toString());
-                List<String> blackList = ((List<String>) (objectListStringReader.readValue(actualObj.get("rsp").get("expletive")))).stream().distinct().collect(Collectors.toList());
-                blackList.stream().forEach(b -> {
-                    chatMessage.setContent(chatMessage.getContent().replaceAll("(?i)" + b, "<font color='red'>" + b + "</font>"));
-                    if (service.addBlackWord(b)) {
-
-                        ChatMessage blackWord = new ChatMessage();
-                        blackWord.setType(ChatMessage.MessageType.BLACK);
-                        blackWord.setContent(b);
-                        blackWord.setSender(chatMessage.getSender());
-
-                        messagingTemplate.convertAndSend("/topic/black", blackWord);
-                    }
-                });
-
+            JsonNode jsonResult = objectMapper.readTree(apiResult);
+            if (jsonResult.get("rsp").get("expletive") != null) {
+                blackWordProcess(chatMessage, jsonResult);
             }
         } catch (IOException e) {
             e.printStackTrace();
         }
 
         return chatMessage;
+    }
+
+    private void blackWordProcess(@Payload ChatMessage chatMessage, JsonNode jsonResult) throws IOException {
+        logger.info(jsonResult.get("rsp").get("expletive").toString());
+        List<String> blackList = ((List<String>) (objectListStringReader.readValue(jsonResult.get("rsp")
+                .get("expletive")))).stream().distinct().collect(Collectors.toList());
+        blackList.stream().forEach(b -> {
+            chatMessage.setContent(chatMessage.getContent()
+                    .replaceAll("(?i)" + b, "<font color='red'>" + b + "</font>"));
+            try {
+                if (service.addBlackWord(chatMessage, b)) {
+                    ChatMessage blackWord = new ChatMessage();
+                    blackWord.setType(ChatMessage.MessageType.BLACK);
+                    blackWord.setContent(b);
+                    blackWord.setSender(chatMessage.getSender());
+                    messagingTemplate.convertAndSend("/topic/black", blackWord);
+                }
+            } catch (JsonProcessingException e) {
+                e.printStackTrace();
+            }
+        });
     }
 
     @MessageMapping("/chat.addUser")
