@@ -6,6 +6,7 @@ var usernameForm = document.querySelector('#usernameForm');
 var messageForm = document.querySelector('#messageForm');
 var messageInput = document.querySelector('#message');
 var messageArea = document.querySelector('#messageArea');
+var blackArea = document.querySelector('#blackArea')
 var connectingElement = document.querySelector('.connecting');
 
 var stompClient = null;
@@ -35,13 +36,22 @@ function connect(event) {
 function onConnected() {
     // Subscribe to the Public Topic
     stompClient.subscribe('/topic/public', onMessageReceived);
+    stompClient.subscribe('/topic/black', onBlackReceived);
 
     // Tell your username to the server
     stompClient.send("/app/chat.addUser",
         {},
         JSON.stringify({sender: username, type: 'JOIN'})
     )
+    var httpRequest = new XMLHttpRequest();
 
+    httpRequest.onreadystatechange =  function() {
+        if (this.readyState == 4 && this.status == 200) {
+            onBlackReceived({"body":this.responseText});
+        }
+    };;
+    httpRequest.open('GET', '/blackWordList');
+    httpRequest.send();
     connectingElement.classList.add('hidden');
 }
 
@@ -68,6 +78,21 @@ function sendMessage(event) {
     event.preventDefault();
 }
 
+function onBlackReceived(payload){
+    var message = JSON.parse(payload.body);
+    if(message.type == "BLACK"){
+        message.content.split(",").forEach(function (world) {
+            var messageElement = document.createElement('li');
+            var textElement = document.createElement('p');
+            var messageText = document.createTextNode(world);
+            textElement.appendChild(messageText);
+            messageElement.appendChild(textElement);
+            blackArea.appendChild(messageElement);
+            blackArea.scrollTop = blackArea.scrollHeight;
+        });
+
+    }
+}
 
 function onMessageReceived(payload) {
     var message = JSON.parse(payload.body);
@@ -97,8 +122,13 @@ function onMessageReceived(payload) {
     }
 
     var textElement = document.createElement('p');
-    var messageText = document.createTextNode(message.content);
-    textElement.appendChild(messageText);
+
+    // var messageText = document.createTextNode(message.content);
+
+    var messageText = (message.content);
+    var elem = document.createElement('div'); //색상을 넣기 위하여 사용
+    elem.innerHTML = messageText;
+    textElement.appendChild(elem);
 
     messageElement.appendChild(textElement);
 
